@@ -43,9 +43,18 @@ class WardrobeService {
     return List.unmodifiable(_clothes);
   }
 
-  /// Obtiene prendas por tipo
-  List<ClothingItem> getClothesByType(ClothingType type) {
-    return _clothes.where((item) => item.type == type).toList();
+  /// Obtiene prendas por categoría
+  List<ClothingItem> getClothesByCategory(ClothingCategory category) {
+    return _clothes.where((item) => item.category == category).toList();
+  }
+
+  /// Organiza prendas por categoría
+  Map<ClothingCategory, List<ClothingItem>> getClothesByCategories() {
+    final result = <ClothingCategory, List<ClothingItem>>{};
+    for (final category in ClothingCategory.values) {
+      result[category] = getClothesByCategory(category);
+    }
+    return result;
   }
 
   /// Busca prendas por nombre

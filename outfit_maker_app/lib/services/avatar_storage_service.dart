@@ -25,9 +25,9 @@ class AvatarStorageService {
   static const String _sideImageKey = 'avatar_side_image'; // Legacy
 
   /// Si se activa, el setup del avatar se considerará completo solo cuando
-  /// existan todas las vistas multi-ángulo (frente, lateral derecho, trasera, lateral izquierdo).
-  /// Puedes desactivarlo para permitir la creación con una sola foto.
-  static const bool requireMultiAngleSetup = true;
+  /// existan todas las vistas multi-ángulo.
+  /// Desactivado por defecto para sistema simple de una foto.
+  static const bool requireMultiAngleSetup = false;
 
   /// Verifica si el usuario ya completó el setup del avatar
   Future<bool> hasCompletedSetup() async {

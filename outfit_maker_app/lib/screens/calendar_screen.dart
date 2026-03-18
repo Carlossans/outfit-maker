@@ -3,9 +3,8 @@ import 'package:table_calendar/table_calendar.dart';
 import '../models/outfit.dart';
 import '../services/outfit_service.dart';
 import '../services/calendar_outfit_service.dart';
-import '../services/weather_service.dart';
-import '../ai/outfit_ai.dart';
 
+/// Pantalla de calendario para planificar outfits
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
@@ -20,12 +19,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   final OutfitService _outfitService = OutfitService();
   final CalendarOutfitService _calendarService = CalendarOutfitService();
-  final WeatherService _weatherService = WeatherService();
-  final OutfitAI _outfitAI = OutfitAI();
 
   List<Outfit> _savedOutfits = [];
   bool _isLoading = true;
-  double? _currentTemperature;
 
   @override
   void initState() {
@@ -42,18 +38,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _savedOutfits = _outfitService.getAllOutfits();
       _isLoading = false;
     });
-
-    // Cargar temperatura actual
-    _loadTemperature();
-  }
-
-  Future<void> _loadTemperature() async {
-    if (_weatherService.isConfigured) {
-      final temp = await _weatherService.getCurrentLocationTemperature();
-      if (mounted) {
-        setState(() => _currentTemperature = temp);
-      }
-    }
   }
 
   Future<void> _refreshData() async {
@@ -68,7 +52,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Sin outfits guardados'),
-          content: const Text('Primero debes crear y guardar outfits en el creador de outfits.'),
+          content: const Text(
+              'Primero debes crear y guardar outfits en el creador de outfits.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -94,19 +79,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Seleccionar outfit para ${_formatDate(day)}',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.auto_awesome),
-                      tooltip: 'Sugerir outfit',
-                      onPressed: () => _suggestOutfitForDay(day),
-                    ),
-                  ],
+                Text(
+                  'Seleccionar outfit para ${_formatDate(day)}',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 16),
                 Expanded(
@@ -115,13 +90,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     itemCount: _savedOutfits.length,
                     itemBuilder: (context, index) {
                       final outfit = _savedOutfits[index];
-                      final isPlanned = _calendarService.getPlannedOutfitForDate(day)?.outfitId == outfit.id;
+                      final isPlanned = _calendarService
+                              .getPlannedOutfitForDate(day)
+                              ?.outfitId ==
+                          outfit.id;
 
                       return Card(
                         color: isPlanned ? Colors.blue.shade50 : null,
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: isPlanned ? Colors.blue : Colors.grey,
+                            backgroundColor:
+                                isPlanned ? Colors.blue : Colors.grey,
                             child: Text('${outfit.clothes.length}'),
                           ),
                           title: Text(outfit.name),
@@ -148,83 +127,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         },
       ),
     );
-  }
-
-  Future<void> _suggestOutfitForDay(DateTime day) async {
-    // Obtener prendas del armario
-    final clothes = _savedOutfits.expand((o) => o.clothes).toList();
-
-    if (clothes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay prendas disponibles')),
-      );
-      return;
-    }
-
-    // Sugerir outfit basado en temperatura
-    final suggestion = _outfitAI.suggestOutfit(
-      clothes,
-      temperature: _currentTemperature,
-    );
-
-    if (suggestion.isEmpty) return;
-
-    // Crear outfit temporal
-    final tempOutfit = Outfit(
-      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-      name: 'Sugerencia para ${_formatDate(day)}',
-      clothes: suggestion,
-      createdAt: DateTime.now(),
-    );
-
-    // Mostrar diálogo de confirmación
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Outfit Sugerido'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_outfitAI.generateOutfitExplanation(
-              suggestion,
-              temperature: _currentTemperature,
-            )),
-            const SizedBox(height: 16),
-            ...suggestion.map((item) => ListTile(
-              leading: const Icon(Icons.checkroom),
-              title: Text(item.name),
-              dense: true,
-            )),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Usar este outfit'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      // Guardar outfit y planificar
-      final saved = await _outfitService.saveOutfit(
-        name: tempOutfit.name,
-        clothes: suggestion,
-      );
-
-      await _calendarService.planOutfit(
-        outfitId: saved.id,
-        date: day,
-      );
-
-      await _refreshData();
-    }
   }
 
   Future<void> _showOutfitDetails(PlannedOutfit planned) async {
@@ -259,11 +161,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
             const SizedBox(height: 8),
             ...outfit.clothes.map((item) => ListTile(
-              leading: const Icon(Icons.checkroom),
-              title: Text(item.name),
-              subtitle: Text('${item.category} • Talla ${item.size}'),
-              dense: true,
-            )),
+                  leading: Text(item.type.icon),
+                  title: Text(item.name),
+                  subtitle: Text('${item.category} • Talla ${item.size}'),
+                  dense: true,
+                )),
             const SizedBox(height: 16),
             Row(
               children: [
@@ -277,7 +179,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       Navigator.pop(context);
                       setState(() {});
                     },
-                    icon: Icon(planned.isCompleted ? Icons.undo : Icons.check),
+                    icon: Icon(
+                        planned.isCompleted ? Icons.undo : Icons.check),
                     label: Text(planned.isCompleted ? 'Desmarcar' : 'Usado'),
                   ),
                 ),
@@ -290,7 +193,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       setState(() {});
                     },
                     icon: const Icon(Icons.delete, color: Colors.red),
-                    label: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+                    label: const Text('Eliminar',
+                        style: TextStyle(color: Colors.red)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade50,
                     ),
@@ -314,7 +218,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Calendario de Outfits"),
+        title: const Text('Calendario de Outfits'),
         actions: [
           IconButton(
             icon: const Icon(Icons.today),
@@ -341,7 +245,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 value: 'auto',
                 child: Row(
                   children: [
-                    Icon(Icons.auto_awesome),
+                    Icon(Icons.calendar_today),
                     SizedBox(width: 8),
                     Text('Planificar semana'),
                   ],
@@ -353,7 +257,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   children: [
                     Icon(Icons.clear_all, color: Colors.red),
                     SizedBox(width: 8),
-                    Text('Limpiar todo', style: TextStyle(color: Colors.red)),
+                    Text('Limpiar todo',
+                        style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -443,12 +348,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
               icon: const Icon(Icons.add),
               label: const Text('Añadir Outfit'),
             ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: () => _suggestOutfitForDay(_selectedDay!),
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('Sugerir Outfit'),
-            ),
           ],
         ),
       );
@@ -465,10 +364,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Card(
-          color: planned.isCompleted ? Colors.green.shade50 : Colors.blue.shade50,
+          color: planned.isCompleted
+              ? Colors.green.shade50
+              : Colors.blue.shade50,
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: planned.isCompleted ? Colors.green : Colors.blue,
+              backgroundColor:
+                  planned.isCompleted ? Colors.green : Colors.blue,
               child: Icon(
                 planned.isCompleted ? Icons.check : Icons.checkroom,
                 color: Colors.white,
@@ -489,12 +391,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
         const SizedBox(height: 8),
         ...outfit.clothes.map((item) => Card(
-          child: ListTile(
-            leading: const Icon(Icons.checkroom),
-            title: Text(item.name),
-            subtitle: Text('${item.category} • Talla ${item.size}'),
-          ),
-        )),
+              child: ListTile(
+                leading: Text(item.type.icon),
+                title: Text(item.name),
+                subtitle: Text('${item.category} • Talla ${item.size}'),
+              ),
+            )),
       ],
     );
   }

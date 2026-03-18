@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
 import '../models/multi_angle_avatar.dart';
 import '../services/advanced_scanner_capture_service.dart';
 import '../services/image_service.dart';

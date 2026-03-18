@@ -85,7 +85,7 @@ class AdvancedScannerCaptureService {
 
     final missing = <String>[];
     for (final landmark in requiredLandmarks) {
-      if (!landmarks.containsKey(landmark) || landmarks[landmark]!.inFrameLikelihood < 0.5) {
+      if (!landmarks.containsKey(landmark) || landmarks[landmark]!.likelihood < 0.5) {
         missing.add(_getLandmarkName(landmark));
       }
     }
@@ -268,7 +268,7 @@ class AdvancedScannerCaptureService {
     double avgConfidence = 0;
     int count = 0;
     for (final landmark in landmarks.values) {
-      avgConfidence += landmark.inFrameLikelihood;
+      avgConfidence += landmark.likelihood;
       count++;
     }
     avgConfidence /= count;

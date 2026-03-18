@@ -6,7 +6,7 @@ import '../models/clothing_item.dart';
 
 /// Servicio para gestionar outfits guardados
 class OutfitService {
-  static const String _outfitsKey = 'saved_outfits';
+  static const String _outfitsKey = 'saved_outfits_v2';
   static const String _outfitCounterKey = 'outfit_counter';
 
   static final OutfitService _instance = OutfitService._internal();
@@ -23,27 +23,52 @@ class OutfitService {
     _isInitialized = true;
   }
 
-  /// Guarda un nuevo outfit
+  /// Guarda un nuevo outfit con capas
   Future<Outfit> saveOutfit({
     required String name,
     required List<ClothingItem> clothes,
-    String? season,
-    List<String>? tags,
+    String? thumbnailPath,
   }) async {
+    // Crear capas ordenadas por categoría (layerOrder)
+    final layers = clothes
+        .map((item) => OutfitLayer(item: item))
+        .toList()
+      ..sort((a, b) => a.item.position.layerOrder.compareTo(b.item.position.layerOrder));
+
     final outfit = Outfit(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
-      clothes: List.from(clothes),
+      layers: layers,
       createdAt: DateTime.now(),
+      thumbnailPath: thumbnailPath,
     );
 
     _outfits.add(outfit);
     await _saveToStorage();
-
-    // Incrementar contador
     await _incrementCounter();
 
-    debugPrint('✅ Outfit guardado: ${outfit.name} (${outfit.clothes.length} prendas)');
+    debugPrint('✅ Outfit guardado: ${outfit.name} (${layers.length} prendas)');
+    return outfit;
+  }
+
+  /// Guarda un outfit completo con capas personalizadas
+  Future<Outfit> saveOutfitWithLayers({
+    required String name,
+    required List<OutfitLayer> layers,
+    String? thumbnailPath,
+  }) async {
+    final outfit = Outfit(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name,
+      layers: layers,
+      createdAt: DateTime.now(),
+      thumbnailPath: thumbnailPath,
+    );
+
+    _outfits.add(outfit);
+    await _saveToStorage();
+    await _incrementCounter();
+
     return outfit;
   }
 
@@ -65,7 +90,7 @@ class OutfitService {
   Future<bool> updateOutfit(Outfit updatedOutfit) async {
     final index = _outfits.indexWhere((o) => o.id == updatedOutfit.id);
     if (index != -1) {
-      _outfits[index] = updatedOutfit;
+      _outfits[index] = updatedOutfit.copyWith(updatedAt: DateTime.now());
       await _saveToStorage();
       return true;
     }
@@ -91,45 +116,30 @@ class OutfitService {
         .toList();
   }
 
-  /// Obtiene outfits por temporada
-  List<Outfit> getOutfitsBySeason(String season) {
-    // Por ahora filtramos por nombre que contenga la temporada
-    // En el futuro se puede añadir campo season al modelo
-    final seasonKeywords = {
-      'verano': ['verano', 'summer', 'calor', 'playa'],
-      'invierno': ['invierno', 'winter', 'frío', 'abrigo'],
-      'primavera': ['primavera', 'spring'],
-      'otoño': ['otoño', 'autumn', 'fall'],
-    };
-
-    final keywords = seasonKeywords[season.toLowerCase()] ?? [season.toLowerCase()];
-
-    return _outfits.where((o) {
-      final nameLower = o.name.toLowerCase();
-      return keywords.any((k) => nameLower.contains(k));
-    }).toList();
+  /// Obtiene outfits por categoría de prenda
+  List<Outfit> getOutfitsByCategory(ClothingCategory category) {
+    return _outfits.where((o) => o.hasCategory(category)).toList();
   }
 
   /// Obtiene outfits recientes (últimos N días)
   List<Outfit> getRecentOutfits({int days = 7}) {
     final cutoffDate = DateTime.now().subtract(Duration(days: days));
     return _outfits
-        .where((o) => o.createdAt != null && o.createdAt!.isAfter(cutoffDate))
+        .where((o) => o.createdAt.isAfter(cutoffDate))
         .toList();
   }
 
-  /// Obtiene los outfits más usados (simulado - en futuro se puede trackear uso real)
-  List<Outfit> getMostUsedOutfits({int limit = 5}) {
-    // Por ahora devolvemos los más recientes
+  /// Obtiene los outfits más recientes
+  List<Outfit> getMostRecentOutfits({int limit = 5}) {
     final sorted = List<Outfit>.from(_outfits)
-      ..sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return sorted.take(limit).toList();
   }
 
   /// Obtiene outfits que contienen una prenda específica
   List<Outfit> getOutfitsContainingClothing(String clothingId) {
     return _outfits.where((o) {
-      return o.clothes.any((c) => c.id == clothingId);
+      return o.layers.any((l) => l.item.id == clothingId);
     }).toList();
   }
 
@@ -184,12 +194,20 @@ class OutfitService {
 
   /// Obtiene estadísticas
   Map<String, dynamic> getStats() {
+    if (_outfits.isEmpty) {
+      return {
+        'totalOutfits': 0,
+        'totalItems': 0,
+        'averageItemsPerOutfit': '0.0',
+      };
+    }
+
+    final totalItems = _outfits.fold<int>(0, (sum, o) => sum + o.layers.length);
+
     return {
       'totalOutfits': _outfits.length,
-      'totalItems': _outfits.fold<int>(0, (sum, o) => sum + o.clothes.length),
-      'averageItemsPerOutfit': _outfits.isEmpty
-          ? 0
-          : (_outfits.fold<int>(0, (sum, o) => sum + o.clothes.length) / _outfits.length).toStringAsFixed(1),
+      'totalItems': totalItems,
+      'averageItemsPerOutfit': (totalItems / _outfits.length).toStringAsFixed(1),
     };
   }
 }

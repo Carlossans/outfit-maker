@@ -1,12 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import '../services/image_service.dart';
 import '../services/wardrobe_service.dart';
 import '../models/clothing_item.dart';
-import '../services/bg_removal_service.dart';
 import 'clothing_multi_angle_capture_screen.dart';
 
+/// Pantalla simplificada para añadir prendas al armario
 class AddClothingScreen extends StatefulWidget {
   const AddClothingScreen({super.key});
 
@@ -16,11 +15,12 @@ class AddClothingScreen extends StatefulWidget {
 
 class _AddClothingScreenState extends State<AddClothingScreen> {
   File? imageFile;
+  bool _isSaving = false;
 
   final ImageService imageService = ImageService();
   final nameController = TextEditingController();
   final sizeController = TextEditingController();
-  ClothingType selectedType = ClothingType.top; // Valor por defecto
+  ClothingType selectedType = ClothingType.top;
 
   @override
   void initState() {
@@ -100,7 +100,7 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
   }
 
   void _showSimpleCapture() {
-    // Continuar con el flujo simple existente
+    // El formulario simple se muestra directamente
   }
 
   Future<void> pickImageGallery() async {
@@ -114,57 +114,44 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
   }
 
   Future<void> saveClothing() async {
-    if (imageFile == null) return;
-
-    // CORREGIDO: Usar path_provider para obtener directorio temporal
-    final tempDir = await getTemporaryDirectory();
-    final String tempPath =
-        "${tempDir.path}/transparent_${DateTime.now().millisecondsSinceEpoch}.png";
-
-    final bgService = BgRemovalService();
-
-    final result = await bgService.removeBackground(imageFile!, tempPath);
-
-    if (result == null) {
-      debugPrint("No se pudo eliminar el fondo");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al procesar la imagen')),
-        );
-      }
+    if (imageFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona una imagen primero')),
+      );
       return;
     }
 
-    // CORRECCIÓN: Usar ClothingType correctamente
-    final item = ClothingItem(
-      id: DateTime.now().toString(),
-      name: nameController.text.isNotEmpty ? nameController.text : "Prenda",
-      category: _getCategoryFromType(selectedType),
-      size: sizeController.text.isNotEmpty ? sizeController.text : "M",
-      imagePath: result.path,
-      assetPath: '', // Vacío porque es una imagen capturada, no un asset
-      type: selectedType, // Ahora es ClothingType
-    );
+    setState(() => _isSaving = true);
 
-    await WardrobeService().addClothing(item);
-    if (mounted) {
-      Navigator.pop(context);
-    }
-  }
+    try {
+      final item = ClothingItem(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: nameController.text.isNotEmpty ? nameController.text : 'Prenda',
+        category: selectedType.displayName,
+        size: sizeController.text.isNotEmpty ? sizeController.text : 'M',
+        imagePath: imageFile!.path,
+        type: selectedType,
+        createdAt: DateTime.now(),
+      );
 
-  // Helper para convertir ClothingType a categoría string
-  String _getCategoryFromType(ClothingType type) {
-    switch (type) {
-      case ClothingType.top:
-        return "top";
-      case ClothingType.bottom:
-        return "bottom";
-      case ClothingType.headwear:
-        return "headwear";
-      case ClothingType.footwear:
-        return "footwear";
-      case ClothingType.neckwear:
-        return "neckwear";
+      await WardrobeService().addClothing(item);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Prenda guardada exitosamente')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 
@@ -179,7 +166,7 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Añadir prenda - Simple"),
+        title: const Text('Añadir prenda'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -210,51 +197,122 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            if (imageFile != null) Image.file(imageFile!, height: 200),
+
+            // Preview de imagen
+            Container(
+              height: 200,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: imageFile != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(imageFile!, fit: BoxFit.cover),
+                    )
+                  : Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.image, size: 48, color: Colors.grey.shade400),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Sin imagen seleccionada',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
             const SizedBox(height: 20),
 
             // Selector de tipo de prenda
             DropdownButtonFormField<ClothingType>(
-              initialValue: selectedType,
-              decoration: const InputDecoration(labelText: "Tipo de prenda"),
+              value: selectedType,
+              decoration: const InputDecoration(
+                labelText: 'Tipo de prenda',
+                border: OutlineInputBorder(),
+              ),
               items: ClothingType.values.map((type) {
                 return DropdownMenuItem(
                   value: type,
-                  child: Text(type.toString().split('.').last),
+                  child: Row(
+                    children: [
+                      Text(type.icon),
+                      const SizedBox(width: 8),
+                      Text(type.displayName),
+                    ],
+                  ),
                 );
               }).toList(),
               onChanged: (value) {
                 if (value != null) {
-                  setState(() {
-                    selectedType = value;
-                  });
+                  setState(() => selectedType = value);
                 }
               },
             ),
+            const SizedBox(height: 16),
 
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(labelText: "Nombre de la prenda"),
+              decoration: const InputDecoration(
+                labelText: 'Nombre de la prenda',
+                border: OutlineInputBorder(),
+              ),
             ),
+            const SizedBox(height: 16),
+
             TextField(
               controller: sizeController,
-              decoration: const InputDecoration(labelText: "Talla (EU)"),
+              decoration: const InputDecoration(
+                labelText: 'Talla (EU)',
+                border: OutlineInputBorder(),
+              ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: pickImageGallery,
-              child: const Text("Seleccionar de galería"),
+            const SizedBox(height: 24),
+
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: pickImageGallery,
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('Galería'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: pickImageCamera,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Cámara'),
+                  ),
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: pickImageCamera,
-              child: const Text("Usar cámara"),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: saveClothing,
-              child: const Text("Guardar prenda"),
+            const SizedBox(height: 24),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isSaving ? null : saveClothing,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.save),
+                label: Text(_isSaving ? 'Guardando...' : 'Guardar prenda'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
+
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(context);

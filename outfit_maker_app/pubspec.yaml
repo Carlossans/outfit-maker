@@ -1,5 +1,4 @@
-# pubspec.yaml (corregido)
-name: outfi_maker_app
+name: outfit_maker_app
 description: "A new Flutter project."
 publish_to: 'none'
 version: 1.0.0+1
@@ -11,22 +10,11 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Firebase
-  firebase_core: ^4.5.0
-  firebase_auth: ^6.2.0
-  cloud_firestore: ^6.1.3
-  firebase_storage: ^13.1.0
-
-  # Imagenes y escaneo
+  # Imagenes
   image_picker: ^1.0.7
-  mobile_scanner: ^7.2.0
 
   # HTTP y estado
   http: ^1.2.0
-  provider: ^6.1.2
-
-  # Geolocalización
-  geolocator: ^14.0.2
 
   # Utilidades para rutas de archivos
   path: ^1.9.0
@@ -41,10 +29,6 @@ dependencies:
   # Iconos de iOS
   cupertino_icons: ^1.0.8
 
-  # Google ML Kit (versiones compatibles)
-  google_mlkit_pose_detection: ^0.12.0
-  google_mlkit_selfie_segmentation: ^0.7.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -52,10 +36,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  
-  # CORRECCIÓN: Los assets van aquí, dentro de flutter
-  # TODO: Añadir assets cuando estén disponibles
-  # assets:
-  #   - assets/clothes/shirt1.png
-  #   - assets/clothes/jacket1.png
-  #   - assets/clothes/pants1.png
