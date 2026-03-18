@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import '../models/clothing_item.dart';
-import '../models/outfit.dart';
-import '../services/wardrobe_service.dart';
-import '../services/outfit_service.dart';
-import '../widgets/outfit_canvas.dart';
-import '../widgets/clothing_selector.dart';
+import '../models/app_models.dart';
+import '../services/app_services.dart';
+import '../widgets/outfit_canvas_new.dart';
+import '../widgets/clothing_carousel.dart';
 
 /// Pantalla para crear outfits visualmente
-/// Muestra un modelo central con prendas superpuestas y carruseles para seleccionar
+/// Muestra un maniquí central con prendas superpuestas y carruseles para seleccionar
 class OutfitBuilderScreen extends StatefulWidget {
   const OutfitBuilderScreen({super.key});
 
@@ -22,12 +20,12 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
 
-  // Prendas organizadas por tipo
-  Map<ClothingType, List<ClothingItem>> _clothesByType = {};
+  // Prendas organizadas por categoría
+  Map<ClothingCategory, List<ClothingItem>> _clothesByCategory = {};
 
-  // Selección actual por tipo
-  Map<ClothingType, ClothingItem?> _selectedByType = {
-    for (var type in ClothingType.values) type: null,
+  // Selección actual por categoría
+  Map<ClothingCategory, ClothingItem?> _selectedByCategory = {
+    for (var cat in ClothingCategory.values) cat: null,
   };
 
   @override
@@ -40,17 +38,17 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
     await _wardrobeService.initialize();
     await _outfitService.initialize();
 
-    final clothes = _wardrobeService.getClothes();
+    final clothes = _wardrobeService.getAllItems();
 
-    // Organizar por tipo
-    final byType = <ClothingType, List<ClothingItem>>{};
-    for (final type in ClothingType.values) {
-      byType[type] = clothes.where((c) => c.type == type).toList();
+    // Organizar por categoría
+    final byCategory = <ClothingCategory, List<ClothingItem>>{};
+    for (final category in ClothingCategory.values) {
+      byCategory[category] = clothes.where((c) => c.category == category).toList();
     }
 
     if (mounted) {
       setState(() {
-        _clothesByType = byType;
+        _clothesByCategory = byCategory;
         _isLoading = false;
       });
     }
@@ -58,15 +56,15 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
 
   /// Obtiene las prendas seleccionadas como lista
   List<ClothingItem> get _selectedItems =>
-      _selectedByType.values.whereType<ClothingItem>().toList();
+      _selectedByCategory.values.whereType<ClothingItem>().toList();
 
   /// Verifica si hay al menos una prenda seleccionada
   bool get _hasSelection => _selectedItems.isNotEmpty;
 
   /// Maneja la selección de una prenda
-  void _onItemSelected(ClothingType type, ClothingItem? item) {
+  void _onItemSelected(ClothingCategory category, ClothingItem? item) {
     setState(() {
-      _selectedByType[type] = item;
+      _selectedByCategory[category] = item;
     });
 
     if (item != null) {
@@ -76,7 +74,7 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
           duration: const Duration(seconds: 1),
           action: SnackBarAction(
             label: 'Deshacer',
-            onPressed: () => _onItemSelected(type, null),
+            onPressed: () => _onItemSelected(category, null),
           ),
         ),
       );
@@ -86,8 +84,8 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
   /// Limpia todas las selecciones
   void _clearSelection() {
     setState(() {
-      for (final type in ClothingType.values) {
-        _selectedByType[type] = null;
+      for (final category in ClothingCategory.values) {
+        _selectedByCategory[category] = null;
       }
     });
   }
@@ -101,9 +99,7 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
       return;
     }
 
-    // Contar tipos seleccionados para el nombre por defecto
     final selectedCount = _selectedItems.length;
-
     final nameController = TextEditingController(
       text: 'Outfit $selectedCount prendas',
     );
@@ -135,7 +131,7 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
                 children: _selectedItems
                     .map((item) => ListTile(
                           dense: true,
-                          leading: Text(item.type.icon),
+                          leading: Text(item.category.icon),
                           title: Text(item.name),
                           contentPadding: EdgeInsets.zero,
                         ))
@@ -161,16 +157,11 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
       setState(() => _isSaving = true);
 
       try {
-        // Crear capas del outfit
-        final layers = _selectedItems
-            .map((item) => OutfitLayer(item: item))
-            .toList();
-
         await _outfitService.saveOutfit(
           name: nameController.text.isNotEmpty
               ? nameController.text
               : 'Outfit ${DateTime.now().day}/${DateTime.now().month}',
-          clothes: _selectedItems,
+          items: _selectedItems,
         );
 
         if (mounted) {
@@ -195,7 +186,7 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
 
   /// Sugiere un outfit aleatorio
   void _suggestOutfit() {
-    final hasClothes = _clothesByType.values.any((list) => list.isNotEmpty);
+    final hasClothes = _clothesByCategory.values.any((list) => list.isNotEmpty);
 
     if (!hasClothes) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -205,11 +196,11 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
     }
 
     setState(() {
-      for (final type in ClothingType.values) {
-        final items = _clothesByType[type];
+      for (final category in ClothingCategory.values) {
+        final items = _clothesByCategory[category];
         if (items != null && items.isNotEmpty) {
           // Seleccionar aleatoriamente o dejar null
-          _selectedByType[type] =
+          _selectedByCategory[category] =
               DateTime.now().millisecond % 3 == 0 ? null : items.first;
         }
       }
@@ -253,9 +244,9 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
       ),
       body: Column(
         children: [
-          // SECCIÓN SUPERIOR: Canvas con el modelo y prendas
+          // SECCIÓN SUPERIOR: Canvas con el maniquí y prendas
           Expanded(
-            flex: 3,
+            flex: 5,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: OutfitCanvas(
@@ -267,7 +258,7 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
 
           // SECCIÓN INFERIOR: Selectores de prendas
           Expanded(
-            flex: 2,
+            flex: 4,
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -276,7 +267,7 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withAlpha(10),
+                    color: Colors.black.withOpacity(0.08),
                     blurRadius: 8,
                     offset: const Offset(0, -4),
                   ),
@@ -328,15 +319,13 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
 
                   // Carruseles de prendas
                   Expanded(
-                    child: _clothesByType.values.every((l) => l.isEmpty)
+                    child: _clothesByCategory.values.every((l) => l.isEmpty)
                         ? _buildEmptyState()
-                        : SingleChildScrollView(
-                            child: ClothingSelector(
-                              clothesByType: _clothesByType,
-                              selectedByType: _selectedByType,
-                              onItemSelected: _onItemSelected,
-                              itemSize: 90,
-                            ),
+                        : ClothingCarouselSelector(
+                            clothesByCategory: _clothesByCategory,
+                            selectedByCategory: _selectedByCategory,
+                            onItemSelected: _onItemSelected,
+                            itemSize: 80,
                           ),
                   ),
                 ],

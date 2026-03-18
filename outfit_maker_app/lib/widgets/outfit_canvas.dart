@@ -5,7 +5,9 @@ import '../models/outfit.dart';
 import '../services/avatar_storage_service.dart';
 
 /// Canvas que muestra el avatar del usuario con prendas superpuestas
-/// Las prendas se posicionan usando coordenadas porcentuales relativas al avatar
+/// Esta versión centra el avatar, aplica una caja de referencia (avatarBox)
+/// para posicionar y escalar las prendas consistentemente y garantiza
+/// que todas las prendas del mismo tipo compartan escala similar.
 class OutfitCanvas extends StatefulWidget {
   final List<ClothingItem> selectedItems;
   final double? height;
@@ -25,7 +27,6 @@ class OutfitCanvas extends StatefulWidget {
 class _OutfitCanvasState extends State<OutfitCanvas> {
   File? _avatarImage;
   bool _isLoading = true;
-  Size _avatarSize = Size.zero;
 
   @override
   void initState() {
@@ -51,7 +52,7 @@ class _OutfitCanvasState extends State<OutfitCanvas> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // Ordenar prendas por capa
+    // Ordenar por layerOrder para composicion
     final sortedItems = List<ClothingItem>.from(widget.selectedItems)
       ..sort((a, b) => a.position.layerOrder.compareTo(b.position.layerOrder));
 
@@ -72,19 +73,21 @@ class _OutfitCanvasState extends State<OutfitCanvas> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Avatar del usuario
-                _buildAvatarImage(canvasWidth, canvasHeight),
+                // Fondo tenue para centrar atención en el modelo
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.grey.shade50,
+                  ),
+                ),
 
-                // Capas de prendas
-                ...sortedItems.map((item) => _buildClothingLayer(
-                  item,
-                  canvasWidth,
-                  canvasHeight,
-                )),
+                // Avatar centrado
+                _buildCenteredAvatar(canvasWidth, canvasHeight),
 
-                // Indicador cuando no hay prendas
-                if (sortedItems.isEmpty && _avatarImage != null)
-                  _buildEmptyState(),
+                // Capas de prendas posicionadas relativamente a avatarBox
+                ..._buildClothingLayers(sortedItems, canvasWidth, canvasHeight),
+
+                // Mensaje cuando no hay prendas
+                if (sortedItems.isEmpty) _buildEmptyState(),
               ],
             ),
           ),
@@ -93,75 +96,160 @@ class _OutfitCanvasState extends State<OutfitCanvas> {
     );
   }
 
-  Widget _buildAvatarImage(double canvasWidth, double canvasHeight) {
+  Widget _buildCenteredAvatar(double canvasWidth, double canvasHeight) {
+    // Definimos un area de avatar (avatarBox) centrada dentro del canvas.
+    // Esta caja será la referencia para posicionar/escala las prendas.
+    final avatarBoxWidth = canvasWidth * 0.45; // ocupará ~45% del ancho
+    final avatarBoxHeight = canvasHeight * 0.9; // y la mayoría de la altura
+
+    final avatarBoxLeft = (canvasWidth - avatarBoxWidth) / 2;
+    final avatarBoxTop = (canvasHeight - avatarBoxHeight) / 2;
+
     if (_avatarImage == null) {
-      // Mostrar silueta por defecto si no hay avatar
-      return _buildDefaultSilhouette();
-    }
-
-    return Image.file(
-      _avatarImage!,
-      fit: widget.fit,
-      width: canvasWidth,
-      height: canvasHeight,
-      errorBuilder: (_, __, ___) => _buildDefaultSilhouette(),
-    );
-  }
-
-  Widget _buildClothingLayer(ClothingItem item, double canvasWidth, double canvasHeight) {
-    final pos = item.position;
-
-    // Calcular posición y tamaño basado en porcentajes del canvas
-    final itemWidth = canvasWidth * pos.widthPercent;
-    final itemHeight = canvasHeight * pos.heightPercent;
-
-    // Calcular posición
-    final left = (canvasWidth * pos.anchorX) - (itemWidth / 2);
-    final top = (canvasHeight * pos.anchorY) - (itemHeight / 2);
-
-    return Positioned(
-      left: left,
-      top: top,
-      width: itemWidth,
-      height: itemHeight,
-      child: Transform.rotate(
-        angle: pos.rotation * 3.14159 / 180,
+      // Dibujar silueta dentro de avatarBox
+      return Positioned(
+        left: avatarBoxLeft,
+        top: avatarBoxTop,
+        width: avatarBoxWidth,
+        height: avatarBoxHeight,
         child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(30),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: _buildClothingImage(item),
+          alignment: Alignment.center,
+          child: CustomPaint(
+            size: Size(avatarBoxWidth, avatarBoxHeight),
+            painter: _SimpleSilhouettePainter(),
           ),
         ),
+      );
+    }
+
+    // Si tenemos imagen, la mostramos con BoxFit.cover dentro de avatarBox
+    // y aplicamos una ligera desaturación (por encima) para que la ropa destaque.
+    return Positioned(
+      left: avatarBoxLeft,
+      top: avatarBoxTop,
+      width: avatarBoxWidth,
+      height: avatarBoxHeight,
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(
+              _avatarImage!,
+              width: avatarBoxWidth,
+              height: avatarBoxHeight,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(color: Colors.grey.shade200),
+            ),
+          ),
+          // Overlay leve para bajar contraste
+          Positioned.fill(
+            child: Container(
+              color: Colors.white.withOpacity(0.12),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildClothingImage(ClothingItem item) {
-    // Intentar cargar la imagen de la prenda
+  List<Widget> _buildClothingLayers(List<ClothingItem> items, double canvasWidth, double canvasHeight) {
+    // Avatar box reference (mismo calculo que en _buildCenteredAvatar)
+    final avatarBoxWidth = canvasWidth * 0.45;
+    final avatarBoxHeight = canvasHeight * 0.9;
+    final avatarBoxLeft = (canvasWidth - avatarBoxWidth) / 2;
+    final avatarBoxTop = (canvasHeight - avatarBoxHeight) / 2;
+
+    // Define escalas por tipo para que todas las prendas del mismo tipo usen una escala coherente
+    final Map<ClothingType, Size> typeBaseSizes = {};
+
+    // Primer pase: calcular tamaños base (segun percentos guardados o por defecto)
+    for (final item in items) {
+      final pos = item.position;
+
+      // si el item tiene tamaños percentuales válidos, adaptarlos a avatarBox
+      final width = (pos.widthPercent > 0 && pos.widthPercent <= 1)
+          ? avatarBoxWidth * pos.widthPercent
+          : avatarBoxWidth * 0.9; // fallback ancho
+
+      final height = (pos.heightPercent > 0 && pos.heightPercent <= 1)
+          ? avatarBoxHeight * pos.heightPercent
+          : avatarBoxHeight * 0.25; // fallback alto
+
+      // guardar primer valor por tipo
+      typeBaseSizes.putIfAbsent(item.type, () => Size(width, height));
+    }
+
+    // Si no hay items, no hay capas
+    if (items.isEmpty) return [];
+
+    // Construir widgets posicionado usando la avatarBox como referencia
+    final layers = <Widget>[];
+
+    for (final item in items) {
+      final pos = item.position;
+
+      // Usar el tamaño base por tipo para mantener consistencia
+      final baseSize = typeBaseSizes[item.type]!;
+      final itemWidth = baseSize.width;
+      final itemHeight = baseSize.height;
+
+      // Calcular anclaje relativo dentro de avatarBox
+      // pos.anchorX/Y se espera en rango 0..1 relativo a avatarBox
+      final anchorX = (pos.anchorX >= 0 && pos.anchorX <= 1) ? pos.anchorX : 0.5;
+      final anchorY = (pos.anchorY >= 0 && pos.anchorY <= 1) ? pos.anchorY : 0.45;
+
+      final left = avatarBoxLeft + (avatarBoxWidth * anchorX) - (itemWidth / 2);
+      final top = avatarBoxTop + (avatarBoxHeight * anchorY) - (itemHeight / 2);
+
+      layers.add(Positioned(
+        left: left,
+        top: top,
+        width: itemWidth,
+        height: itemHeight,
+        child: Transform.rotate(
+          angle: (pos.rotation ?? 0) * 3.14159 / 180,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(30),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: _buildClothingImage(item, itemWidth, itemHeight),
+            ),
+          ),
+        ),
+      ));
+    }
+
+    return layers;
+  }
+
+  Widget _buildClothingImage(ClothingItem item, double w, double h) {
+    // Forzamos que la prenda use BoxFit.cover para rellenar su caja y mantener proporciones
     final file = File(item.imagePath);
     if (file.existsSync()) {
       return Image.file(
         file,
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
+        width: w,
+        height: h,
         errorBuilder: (_, __, ___) => _buildImagePlaceholder(item),
       );
     }
 
-    // Si es URL
     if (item.imagePath.startsWith('http')) {
       return Image.network(
         item.imagePath,
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
+        width: w,
+        height: h,
         errorBuilder: (_, __, ___) => _buildImagePlaceholder(item),
       );
     }
@@ -197,13 +285,6 @@ class _OutfitCanvasState extends State<OutfitCanvas> {
     );
   }
 
-  Widget _buildDefaultSilhouette() {
-    return CustomPaint(
-      size: const Size(200, 400),
-      painter: _SimpleSilhouettePainter(),
-    );
-  }
-
   Widget _buildEmptyState() {
     return Positioned(
       bottom: 16,
@@ -212,7 +293,7 @@ class _OutfitCanvasState extends State<OutfitCanvas> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withAlpha(200),
+          color: Colors.white.withAlpha(220),
           borderRadius: BorderRadius.circular(20),
         ),
         child: const Text(

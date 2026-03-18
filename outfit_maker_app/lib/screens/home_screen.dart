@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../widgets/weather_widget.dart';
-import '../services/avatar_storage_service.dart';
+import '../services/app_services.dart';
 import 'wardrobe_screen.dart';
 import 'outfit_builder_screen.dart';
 import 'calendar_screen.dart';
@@ -25,7 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkAvatarStatus() async {
-    final hasAvatar = await AvatarStorageService().hasCompletedSetup();
+    final hasAvatar = await AvatarService().hasCompletedSetup();
     if (mounted) {
       setState(() {
         _hasAvatar = hasAvatar;
@@ -41,8 +40,6 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text("Outfit Maker"),
         centerTitle: true,
         actions: [
-          // Si tiene avatar, mostrar opción de editar
-          // Si no, el menú "Mi Avatar" estará disponible abajo
           if (_hasAvatar)
             IconButton(
               icon: const Icon(Icons.edit),
@@ -63,65 +60,59 @@ class _HomeScreenState extends State<HomeScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-          // Widget de clima
-          const WeatherWidget(),
-          const SizedBox(height: 24),
-
-          // Título de sección
-          Text(
-            'Menú Principal',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
+                // Título de sección
+                Text(
+                  'Menú Principal',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
-          ),
-          const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-          // Opciones del menú
-          _MenuCard(
-            icon: Icons.checkroom,
-            title: 'Mi Armario',
-            subtitle: 'Gestiona tu colección de prendas',
-            color: Colors.blue,
-            onTap: () => _navigateTo(context, const WardrobeScreen()),
-          ),
-          const SizedBox(height: 12),
-          _MenuCard(
-            icon: Icons.auto_awesome,
-            title: 'Crear Outfit',
-            subtitle: 'Combina prendas y crea looks',
-            color: Colors.purple,
-            onTap: () => _navigateTo(context, const OutfitBuilderScreen()),
-          ),
-          const SizedBox(height: 12),
-          _MenuCard(
-            icon: Icons.calendar_month,
-            title: 'Calendario',
-            subtitle: 'Planifica tus outfits de la semana',
-            color: Colors.green,
-            onTap: () => _navigateTo(context, const CalendarScreen()),
-          ),
-          const SizedBox(height: 12),
-          _MenuCard(
-            icon: Icons.folder_outlined,
-            title: 'Mis Outfits',
-            subtitle: 'Ver outfits guardados y álbumes',
-            color: Colors.indigo,
-            onTap: () => _navigateTo(context, const SavedOutfitsScreen()),
-          ),
-          // Solo mostrar "Mi Avatar" si no tiene avatar configurado
-          // Si ya tiene avatar, mostrar opción de editar en el AppBar
-          if (!_hasAvatar) ...[
-            const SizedBox(height: 12),
-            _MenuCard(
-              icon: Icons.person_outline,
-              title: 'Mi Avatar',
-              subtitle: 'Configura tu avatar virtual',
-              color: Colors.orange,
-              onTap: () => _navigateTo(context, const AvatarSetupScreen()),
+                // Opciones del menú
+                _MenuCard(
+                  icon: Icons.checkroom,
+                  title: 'Mi Armario',
+                  subtitle: 'Gestiona tu colección de prendas',
+                  color: Colors.blue,
+                  onTap: () => _navigateTo(context, const WardrobeScreen()),
+                ),
+                const SizedBox(height: 12),
+                _MenuCard(
+                  icon: Icons.auto_awesome,
+                  title: 'Crear Outfit',
+                  subtitle: 'Combina prendas y crea looks',
+                  color: Colors.purple,
+                  onTap: () => _navigateTo(context, const OutfitBuilderScreen()),
+                ),
+                const SizedBox(height: 12),
+                _MenuCard(
+                  icon: Icons.calendar_month,
+                  title: 'Calendario',
+                  subtitle: 'Planifica tus outfits de la semana',
+                  color: Colors.green,
+                  onTap: () => _navigateTo(context, const CalendarScreen()),
+                ),
+                const SizedBox(height: 12),
+                _MenuCard(
+                  icon: Icons.folder_outlined,
+                  title: 'Mis Outfits',
+                  subtitle: 'Ver outfits guardados',
+                  color: Colors.indigo,
+                  onTap: () => _navigateTo(context, const SavedOutfitsScreen()),
+                ),
+                if (!_hasAvatar) ...[
+                  const SizedBox(height: 12),
+                  _MenuCard(
+                    icon: Icons.person_outline,
+                    title: 'Mi Avatar',
+                    subtitle: 'Configura tu avatar virtual',
+                    color: Colors.orange,
+                    onTap: () => _navigateTo(context, const AvatarSetupScreen()),
+                  ),
+                ],
+              ],
             ),
-          ],
-        ],
-      ),
     );
   }
 
@@ -163,7 +154,7 @@ class _MenuCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: color.withAlpha(26),
+                  color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 28),

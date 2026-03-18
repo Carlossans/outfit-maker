@@ -1,7 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import '../models/clothing_item.dart';
-import '../services/wardrobe_service.dart';
-import '../widgets/clothing_card.dart';
+import '../models/app_models.dart';
+import '../services/app_services.dart';
 import 'add_clothing_screen.dart';
 
 class WardrobeScreen extends StatefulWidget {
@@ -13,7 +13,7 @@ class WardrobeScreen extends StatefulWidget {
 
 class _WardrobeScreenState extends State<WardrobeScreen> {
   late Future<void> _initFuture;
-  ClothingType? _selectedFilter;
+  ClothingCategory? _selectedFilter;
 
   @override
   void initState() {
@@ -25,8 +25,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     setState(() {});
   }
 
-  Future<void> _deleteClothing(ClothingItem item) async {
-    // Mostrar diálogo de confirmación
+  Future<void> _deleteItem(ClothingItem item) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -47,7 +46,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     );
 
     if (confirmed == true) {
-      final success = await WardrobeService().removeClothing(item.id);
+      final success = await WardrobeService().removeItem(item.id);
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('"${item.name}" eliminado del armario')),
@@ -57,7 +56,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     }
   }
 
-  void _showClothingDetails(ClothingItem item) {
+  void _showItemDetails(ClothingItem item) {
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
@@ -71,9 +70,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
-            Text('Categoría: ${item.category}'),
-            Text('Talla: ${item.size}'),
-            Text('Tipo: ${_getTypeDisplayName(item.type)}'),
+            Text('Categoría: ${item.category.displayName}'),
+            if (item.color != null) Text('Color: ${item.color}'),
             const SizedBox(height: 16),
             Row(
               children: [
@@ -81,12 +79,12 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(context);
-                      _deleteClothing(item);
+                      _deleteItem(item);
                     },
                     icon: const Icon(Icons.delete, color: Colors.red),
                     label: const Text('Eliminar', style: TextStyle(color: Colors.red)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.withAlpha(30),
+                      backgroundColor: Colors.red.withOpacity(0.1),
                     ),
                   ),
                 ),
@@ -96,21 +94,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         ),
       ),
     );
-  }
-
-  String _getTypeDisplayName(ClothingType type) {
-    switch (type) {
-      case ClothingType.top:
-        return 'Parte Superior';
-      case ClothingType.bottom:
-        return 'Parte Inferior';
-      case ClothingType.headwear:
-        return 'Cabeza';
-      case ClothingType.footwear:
-        return 'Calzado';
-      case ClothingType.neckwear:
-        return 'Cuello';
-    }
   }
 
   @override
@@ -129,41 +112,38 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   }
 
   Widget _buildContent() {
-    var clothes = WardrobeService().getClothes();
+    var items = WardrobeService().getAllItems();
 
-    // Aplicar filtro si hay uno seleccionado
     if (_selectedFilter != null) {
-      clothes = clothes.where((c) => c.type == _selectedFilter).toList();
+      items = items.where((c) => c.category == _selectedFilter).toList();
     }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Mi Armario"),
         actions: [
-          // Filtro por tipo
-          PopupMenuButton<ClothingType?>(
+          PopupMenuButton<ClothingCategory?>(
             icon: const Icon(Icons.filter_list),
             tooltip: 'Filtrar',
-            onSelected: (type) {
-              setState(() => _selectedFilter = type);
+            onSelected: (category) {
+              setState(() => _selectedFilter = category);
             },
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: null,
                 child: Text('Todos'),
               ),
-              ...ClothingType.values.map((type) => PopupMenuItem(
-                value: type,
-                child: Text(_getTypeDisplayName(type)),
+              ...ClothingCategory.values.map((category) => PopupMenuItem(
+                value: category,
+                child: Text('${category.icon} ${category.displayName}'),
               )),
             ],
           ),
-          // Contador de prendas
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Text(
-                '${clothes.length}',
+                '${items.length}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -182,7 +162,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       ),
       body: Column(
         children: [
-          // Chips de filtros activos
           if (_selectedFilter != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -191,16 +170,15 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 spacing: 8,
                 children: [
                   Chip(
-                    label: Text('Filtrado: ${_getTypeDisplayName(_selectedFilter!)}'),
+                    label: Text('Filtrado: ${_selectedFilter!.displayName}'),
                     deleteIcon: const Icon(Icons.close, size: 18),
                     onDeleted: () => setState(() => _selectedFilter = null),
                   ),
                 ],
               ),
             ),
-          // Grid de prendas
           Expanded(
-            child: clothes.isEmpty
+            child: items.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -237,9 +215,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                       crossAxisSpacing: 10,
                       childAspectRatio: 0.75,
                     ),
-                    itemCount: clothes.length,
+                    itemCount: items.length,
                     itemBuilder: (context, index) {
-                      final item = clothes[index];
+                      final item = items[index];
                       return Dismissible(
                         key: Key(item.id),
                         direction: DismissDirection.endToStart,
@@ -263,19 +241,114 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                           ),
                         ),
                         confirmDismiss: (_) async {
-                          await _deleteClothing(item);
-                          return false; // Eliminamos manualmente
+                          await _deleteItem(item);
+                          return false;
                         },
-                        child: ClothingCard(
+                        child: ClothingItemCard(
                           item: item,
-                          onTap: () => _showClothingDetails(item),
-                          onLongPress: () => _deleteClothing(item),
+                          onTap: () => _showItemDetails(item),
+                          onLongPress: () => _deleteItem(item),
                         ),
                       );
                     },
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Tarjeta de prenda individual
+class ClothingItemCard extends StatelessWidget {
+  final ClothingItem item;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  const ClothingItemCard({
+    super.key,
+    required this.item,
+    this.onTap,
+    this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 3,
+              child: _buildImage(),
+            ),
+            Container(
+              padding: const EdgeInsets.all(8),
+              color: Colors.grey.shade50,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.category.displayName,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImage() {
+    if (!item.imagePath.startsWith('http')) {
+      final file = File(item.imagePath);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildPlaceholder(),
+        );
+      }
+    }
+
+    if (item.imagePath.startsWith('http')) {
+      return Image.network(
+        item.imagePath,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _buildPlaceholder(),
+      );
+    }
+
+    return _buildPlaceholder();
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      color: Colors.grey.shade200,
+      child: Center(
+        child: Text(
+          item.category.icon,
+          style: const TextStyle(fontSize: 48),
+        ),
       ),
     );
   }

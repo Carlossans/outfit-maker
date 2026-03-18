@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
 import 'screens/avatar_setup_screen.dart';
-import 'services/wardrobe_service.dart';
-import 'services/storage_service.dart';
-import 'services/avatar_storage_service.dart';
+import 'services/app_services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Inicializar servicios
-  await StorageService().initialize();
   await WardrobeService().initialize();
+  await OutfitService().initialize();
+  await AvatarService().initialize();
 
   runApp(const OutfitApp());
 }
@@ -69,8 +68,8 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 
   Future<void> _checkAvatarStatus() async {
-    final avatarStorage = AvatarStorageService();
-    final hasCompletedSetup = await avatarStorage.hasCompletedSetup();
+    final avatarService = AvatarService();
+    final hasCompletedSetup = await avatarService.hasCompletedSetup();
 
     setState(() {
       _hasAvatar = hasCompletedSetup;
