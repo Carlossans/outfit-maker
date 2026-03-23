@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:table_calendar/table_calendar.dart';
-import '../models/outfit.dart';
-import '../services/outfit_service.dart';
-import '../services/calendar_outfit_service.dart';
+import '../models/app_models.dart';
+import '../services/app_services.dart';
 
-/// Pantalla de calendario para planificar outfits
+/// Pantalla de calendario simplificada para planificar outfits
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
@@ -13,26 +11,23 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  CalendarFormat _calendarFormat = CalendarFormat.month;
-  DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
-
   final OutfitService _outfitService = OutfitService();
-  final CalendarOutfitService _calendarService = CalendarOutfitService();
 
+  DateTime _selectedDay = DateTime.now();
   List<Outfit> _savedOutfits = [];
   bool _isLoading = true;
+
+  // Mapa simple de fecha -> outfit planificado (en memoria)
+  final Map<String, Outfit> _plannedOutfits = {};
 
   @override
   void initState() {
     super.initState();
-    _selectedDay = _focusedDay;
     _initialize();
   }
 
   Future<void> _initialize() async {
     await _outfitService.initialize();
-    await _calendarService.initialize();
 
     setState(() {
       _savedOutfits = _outfitService.getAllOutfits();
@@ -40,10 +35,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
   }
 
-  Future<void> _refreshData() async {
-    setState(() => _isLoading = true);
-    _savedOutfits = _outfitService.getAllOutfits();
-    setState(() => _isLoading = false);
+  String _getDateKey(DateTime date) {
+    return '${date.year}-${date.month}-${date.day}';
   }
 
   void _addOutfitForDay(DateTime day) {
@@ -90,10 +83,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     itemCount: _savedOutfits.length,
                     itemBuilder: (context, index) {
                       final outfit = _savedOutfits[index];
-                      final isPlanned = _calendarService
-                              .getPlannedOutfitForDate(day)
-                              ?.outfitId ==
-                          outfit.id;
+                      final isPlanned = _plannedOutfits[_getDateKey(day)]?.id == outfit.id;
 
                       return Card(
                         color: isPlanned ? Colors.blue.shade50 : null,
@@ -101,20 +91,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           leading: CircleAvatar(
                             backgroundColor:
                                 isPlanned ? Colors.blue : Colors.grey,
-                            child: Text('${outfit.clothes.length}'),
+                            child: Text('${outfit.items.length}'),
                           ),
                           title: Text(outfit.name),
-                          subtitle: Text('${outfit.clothes.length} prendas'),
+                          subtitle: Text('${outfit.items.length} prendas'),
                           trailing: isPlanned
                               ? const Icon(Icons.check_circle, color: Colors.blue)
                               : const Icon(Icons.add_circle_outline),
-                          onTap: () async {
-                            await _calendarService.planOutfit(
-                              outfitId: outfit.id,
-                              date: day,
-                            );
+                          onTap: () {
+                            setState(() {
+                              if (isPlanned) {
+                                _plannedOutfits.remove(_getDateKey(day));
+                              } else {
+                                _plannedOutfits[_getDateKey(day)] = outfit;
+                              }
+                            });
                             Navigator.pop(context);
-                            setState(() {});
                           },
                         ),
                       );
@@ -129,81 +121,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Future<void> _showOutfitDetails(PlannedOutfit planned) async {
-    final outfit = _outfitService.getOutfitById(planned.outfitId);
-    if (outfit == null) return;
-
-    showModalBottomSheet(
+  void _clearPlannedOutfits() {
+    showDialog(
       context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              outfit.name,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Planificado para: ${_formatDate(planned.date)}',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            if (planned.notes != null) ...[
-              const SizedBox(height: 8),
-              Text('Notas: ${planned.notes}'),
-            ],
-            const SizedBox(height: 16),
-            const Text(
-              'Prendas:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ...outfit.clothes.map((item) => ListTile(
-                  leading: Text(item.type.icon),
-                  title: Text(item.name),
-                  subtitle: Text('${item.category} • Talla ${item.size}'),
-                  dense: true,
-                )),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      await _calendarService.markAsCompleted(
-                        planned.id,
-                        completed: !planned.isCompleted,
-                      );
-                      Navigator.pop(context);
-                      setState(() {});
-                    },
-                    icon: Icon(
-                        planned.isCompleted ? Icons.undo : Icons.check),
-                    label: Text(planned.isCompleted ? 'Desmarcar' : 'Usado'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      await _calendarService.removePlannedOutfit(planned.id);
-                      Navigator.pop(context);
-                      setState(() {});
-                    },
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    label: const Text('Eliminar',
-                        style: TextStyle(color: Colors.red)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade50,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+      builder: (context) => AlertDialog(
+        title: const Text('Limpiar calendario'),
+        content: const Text('¿Eliminar todos los outfits planificados?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() => _plannedOutfits.clear());
+              Navigator.pop(context);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Eliminar todo'),
+          ),
+        ],
       ),
     );
   }
@@ -221,117 +158,172 @@ class _CalendarScreenState extends State<CalendarScreen> {
         title: const Text('Calendario de Outfits'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.today),
-            onPressed: () {
-              setState(() {
-                _focusedDay = DateTime.now();
-                _selectedDay = DateTime.now();
-              });
-            },
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) async {
-              if (value == 'auto') {
-                await _calendarService.planWeekAutomatically(_savedOutfits);
-                setState(() {});
-              } else if (value == 'clear') {
-                await _calendarService.clearAllPlannedOutfits();
-                setState(() {});
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'auto',
-                child: Row(
-                  children: [
-                    Icon(Icons.calendar_today),
-                    SizedBox(width: 8),
-                    Text('Planificar semana'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'clear',
-                child: Row(
-                  children: [
-                    Icon(Icons.clear_all, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Limpiar todo',
-                        style: TextStyle(color: Colors.red)),
-                  ],
-                ),
-              ),
-            ],
+            icon: const Icon(Icons.clear_all),
+            onPressed: _clearPlannedOutfits,
+            tooltip: 'Limpiar todo',
           ),
         ],
       ),
       body: Column(
         children: [
-          TableCalendar(
-            firstDay: DateTime.utc(2024, 1, 1),
-            lastDay: DateTime.utc(2025, 12, 31),
-            focusedDay: _focusedDay,
-            calendarFormat: _calendarFormat,
-            selectedDayPredicate: (day) {
-              return isSameDay(_selectedDay, day);
-            },
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay;
-              });
-            },
-            onFormatChanged: (format) {
-              setState(() {
-                _calendarFormat = format;
-              });
-            },
-            onPageChanged: (focusedDay) {
-              _focusedDay = focusedDay;
-            },
-            eventLoader: (day) {
-              final planned = _calendarService.getPlannedOutfitForDate(day);
-              return planned != null ? [planned] : [];
-            },
-            calendarStyle: CalendarStyle(
-              markerDecoration: BoxDecoration(
-                color: Colors.blue.shade300,
-                shape: BoxShape.circle,
-              ),
-              todayDecoration: BoxDecoration(
-                color: Colors.orange.shade300,
-                shape: BoxShape.circle,
-              ),
-              selectedDecoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-                shape: BoxShape.circle,
-              ),
+          // Calendario mensual simplificado
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Header con mes y navegación
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: () {
+                        setState(() {
+                          _selectedDay = DateTime(
+                            _selectedDay.year,
+                            _selectedDay.month - 1,
+                            _selectedDay.day,
+                          );
+                        });
+                      },
+                    ),
+                    Text(
+                      _getMonthName(_selectedDay.month) + ' ${_selectedDay.year}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: () {
+                        setState(() {
+                          _selectedDay = DateTime(
+                            _selectedDay.year,
+                            _selectedDay.month + 1,
+                            _selectedDay.day,
+                          );
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Días de la semana
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: const [
+                    Text('Lun', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Mar', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Mié', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Jue', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Vie', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Sáb', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Dom', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Días del mes
+                _buildCalendarDays(),
+              ],
             ),
           ),
+
           const Divider(),
+
+          // Outfit planificado para el día seleccionado
           Expanded(
-            child: _selectedDay == null
-                ? const Center(child: Text('Selecciona un día'))
-                : _buildOutfitList(),
+            child: _buildSelectedDayOutfit(),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _selectedDay != null
-            ? () => _addOutfitForDay(_selectedDay!)
-            : null,
+        onPressed: () => _addOutfitForDay(_selectedDay),
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _buildOutfitList() {
-    final planned = _selectedDay != null
-        ? _calendarService.getPlannedOutfitForDate(_selectedDay!)
-        : null;
+  Widget _buildCalendarDays() {
+    final daysInMonth = _getDaysInMonth(_selectedDay.year, _selectedDay.month);
+    final firstWeekday = DateTime(_selectedDay.year, _selectedDay.month, 1).weekday;
 
-    if (planned == null) {
+    final today = DateTime.now();
+
+    List<Widget> dayWidgets = [];
+
+    // Espacios en blanco para los días antes del primer día del mes
+    for (int i = 1; i < firstWeekday; i++) {
+      dayWidgets.add(const SizedBox.shrink());
+    }
+
+    // Días del mes
+    for (int day = 1; day <= daysInMonth; day++) {
+      final date = DateTime(_selectedDay.year, _selectedDay.month, day);
+      final dateKey = _getDateKey(date);
+      final isSelected = _selectedDay.day == day;
+      final hasOutfit = _plannedOutfits.containsKey(dateKey);
+      final isToday = today.day == day &&
+          today.month == _selectedDay.month &&
+          today.year == _selectedDay.year;
+
+      dayWidgets.add(
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedDay = date;
+            });
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primary
+                  : isToday
+                      ? Colors.orange.shade200
+                      : null,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '$day',
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : Colors.black,
+                    fontWeight: isToday || isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+                if (hasOutfit)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.white : Colors.blue,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 7,
+      childAspectRatio: 1,
+      children: dayWidgets,
+    );
+  }
+
+  Widget _buildSelectedDayOutfit() {
+    final plannedOutfit = _plannedOutfits[_getDateKey(_selectedDay)];
+
+    if (plannedOutfit == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -339,12 +331,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
             const Icon(Icons.event_busy, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             Text(
-              'No hay outfits planificados para ${_formatDate(_selectedDay!)}',
+              'No hay outfits planificados para ${_formatDate(_selectedDay)}',
               style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
-              onPressed: () => _addOutfitForDay(_selectedDay!),
+              onPressed: () => _addOutfitForDay(_selectedDay),
               icon: const Icon(Icons.add),
               label: const Text('Añadir Outfit'),
             ),
@@ -353,55 +345,72 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
     }
 
-    final outfit = _outfitService.getOutfitById(planned.outfitId);
-    if (outfit == null) {
-      return const Center(
-        child: Text('Outfit no encontrado'),
-      );
-    }
-
-    return ListView(
+    return Padding(
       padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          color: planned.isCompleted
-              ? Colors.green.shade50
-              : Colors.blue.shade50,
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor:
-                  planned.isCompleted ? Colors.green : Colors.blue,
-              child: Icon(
-                planned.isCompleted ? Icons.check : Icons.checkroom,
-                color: Colors.white,
-              ),
-            ),
-            title: Text(outfit.name),
-            subtitle: Text(
-              '${outfit.clothes.length} prendas${planned.isCompleted ? ' • Usado' : ''}',
-            ),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () => _showOutfitDetails(planned),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Outfit planificado:',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Prendas del outfit:',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        ...outfit.clothes.map((item) => Card(
-              child: ListTile(
-                leading: Text(item.type.icon),
-                title: Text(item.name),
-                subtitle: Text('${item.category} • Talla ${item.size}'),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.blue.shade100,
+                child: Text('${plannedOutfit.items.length}'),
               ),
-            )),
-      ],
+              title: Text(plannedOutfit.name),
+              subtitle: Text('${plannedOutfit.items.length} prendas'),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () {
+                  setState(() {
+                    _plannedOutfits.remove(_getDateKey(_selectedDay));
+                  });
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Prendas del outfit:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView(
+              children: plannedOutfit.items.map((item) {
+                return Card(
+                  child: ListTile(
+                    leading: Text(item.category.icon),
+                    title: Text(item.name),
+                    subtitle: Text(item.category.displayName),
+                    dense: true,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    return months[month - 1];
+  }
+
+  int _getDaysInMonth(int year, int month) {
+    return DateTime(year, month + 1, 0).day;
   }
 }

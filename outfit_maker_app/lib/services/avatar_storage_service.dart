@@ -1,12 +1,9 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
-import '../models/user_measurements.dart';
-import '../models/multi_angle_avatar.dart';
 
-/// Servicio para persistir el avatar y medidas del usuario
+/// Servicio simplificado para persistir el avatar del usuario
 /// Garantiza que el usuario solo necesite crear su avatar una vez
 class AvatarStorageService {
   static final AvatarStorageService _instance = AvatarStorageService._internal();
@@ -14,20 +11,8 @@ class AvatarStorageService {
   AvatarStorageService._internal();
 
   static const String _avatarImageKey = 'avatar_image_path';
-  static const String _measurementsKey = 'user_measurements';
   static const String _hasCompletedSetupKey = 'has_completed_avatar_setup';
   static const String _avatarCreatedAtKey = 'avatar_created_at';
-  static const String _multiAngleAvatarKey = 'multi_angle_avatar';
-  static const String _frontImageKey = 'avatar_front_image';
-  static const String _rightSideImageKey = 'avatar_right_side_image';
-  static const String _backImageKey = 'avatar_back_image';
-  static const String _leftSideImageKey = 'avatar_left_side_image';
-  static const String _sideImageKey = 'avatar_side_image'; // Legacy
-
-  /// Si se activa, el setup del avatar se considerará completo solo cuando
-  /// existan todas las vistas multi-ángulo.
-  /// Desactivado por defecto para sistema simple de una foto.
-  static const bool requireMultiAngleSetup = false;
 
   /// Verifica si el usuario ya completó el setup del avatar
   Future<bool> hasCompletedSetup() async {
@@ -35,14 +20,8 @@ class AvatarStorageService {
     return prefs.getBool(_hasCompletedSetupKey) ?? false;
   }
 
-  /// Guarda el avatar completo (imagen + medidas)
-  /// Si requireMultiAngleSetup es verdadero, solo marcará el setup como completado
-  /// cuando se haya proporcionado un avatar multi-ángulo completo.
-  Future<void> saveAvatar({
-    required File avatarImage,
-    required UserMeasurements measurements,
-    MultiAngleAvatar? multiAngleAvatar,
-  }) async {
+  /// Guarda el avatar simplificado (solo imagen)
+  Future<void> saveAvatarSimple({required File avatarImage}) async {
     final prefs = await SharedPreferences.getInstance();
 
     // Copiar imagen a almacenamiento permanente de la app
@@ -51,34 +30,11 @@ class AvatarStorageService {
     // Guardar path de la imagen
     await prefs.setString(_avatarImageKey, permanentImagePath);
 
-    // Guardar medidas
-    await prefs.setString(_measurementsKey, jsonEncode(measurements.toJson()));
+    // Marcar setup como completado
+    await prefs.setBool(_hasCompletedSetupKey, true);
+    await prefs.setString(_avatarCreatedAtKey, DateTime.now().toIso8601String());
 
-    // Guardar avatar multi-ángulo si existe
-    if (multiAngleAvatar != null) {
-      await prefs.setString(_multiAngleAvatarKey, multiAngleAvatar.toJsonString());
-    }
-
-    // Marcar setup como completado solo si no se requiere multi-ángulo o
-    // si el avatar_multi_ángulo está completo
-    bool markComplete = true;
-    if (requireMultiAngleSetup) {
-      if (multiAngleAvatar == null) {
-        markComplete = false;
-      } else {
-        markComplete = multiAngleAvatar.isComplete;
-      }
-    }
-
-    if (markComplete) {
-      await prefs.setBool(_hasCompletedSetupKey, true);
-      await prefs.setString(_avatarCreatedAtKey, DateTime.now().toIso8601String());
-      debugPrint('Avatar guardado exitosamente en: $permanentImagePath');
-    } else {
-      // Guardar sin marcar como completo
-      await prefs.setString(_avatarCreatedAtKey, DateTime.now().toIso8601String());
-      debugPrint('Avatar guardado pero multi-ángulo incompleto, no se marca como completo.');
-    }
+    debugPrint('Avatar guardado exitosamente en: $permanentImagePath');
   }
 
   /// Obtiene la ruta de la imagen del avatar guardada
@@ -99,120 +55,12 @@ class AvatarStorageService {
     return null;
   }
 
-  /// Obtiene las medidas guardadas del usuario
-  Future<UserMeasurements?> getMeasurements() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_measurementsKey);
-
-    if (jsonString == null) return null;
-
-    try {
-      final json = jsonDecode(jsonString) as Map<String, dynamic>;
-      return UserMeasurements.fromJson(json);
-    } catch (e) {
-      debugPrint('Error al cargar medidas: $e');
-      return null;
-    }
-  }
-
   /// Obtiene la fecha de creación del avatar
   Future<DateTime?> getAvatarCreatedAt() async {
     final prefs = await SharedPreferences.getInstance();
     final dateString = prefs.getString(_avatarCreatedAtKey);
     if (dateString == null) return null;
     return DateTime.tryParse(dateString);
-  }
-
-  /// Guarda el avatar multi-ángulo
-  Future<void> saveMultiAngleAvatar(MultiAngleAvatar avatar) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_multiAngleAvatarKey, avatar.toJsonString());
-  }
-
-  /// Obtiene el avatar multi-ángulo
-  Future<MultiAngleAvatar?> getMultiAngleAvatar() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_multiAngleAvatarKey);
-    if (jsonString == null) return null;
-
-    try {
-      return MultiAngleAvatar.fromJsonString(jsonString);
-    } catch (e) {
-      debugPrint('Error cargando avatar multi-ángulo: $e');
-      return null;
-    }
-  }
-
-  /// Guarda una imagen para un ángulo específico
-  Future<String?> saveAngleImage(File image, AvatarAngle angle) async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final avatarDir = Directory('${appDir.path}/avatar');
-
-    if (!await avatarDir.exists()) {
-      await avatarDir.create(recursive: true);
-    }
-
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'avatar_${angle.name}_$timestamp.jpg';
-    final destPath = '${avatarDir.path}/$fileName';
-
-    await image.copy(destPath);
-
-    // Guardar referencia
-    final prefs = await SharedPreferences.getInstance();
-    switch (angle) {
-      case AvatarAngle.front:
-        await prefs.setString(_frontImageKey, destPath);
-        break;
-      case AvatarAngle.rightSide:
-        await prefs.setString(_rightSideImageKey, destPath);
-        // Legacy compatibility
-        await prefs.setString(_sideImageKey, destPath);
-        break;
-      case AvatarAngle.back:
-        await prefs.setString(_backImageKey, destPath);
-        break;
-      case AvatarAngle.leftSide:
-        await prefs.setString(_leftSideImageKey, destPath);
-        break;
-    }
-
-    return destPath;
-  }
-
-  /// Obtiene la imagen para un ángulo específico
-  Future<File?> getAngleImage(AvatarAngle angle) async {
-    final prefs = await SharedPreferences.getInstance();
-    String? path;
-
-    switch (angle) {
-      case AvatarAngle.front:
-        path = prefs.getString(_frontImageKey);
-        break;
-      case AvatarAngle.rightSide:
-        path = prefs.getString(_rightSideImageKey) ?? prefs.getString(_sideImageKey);
-        break;
-      case AvatarAngle.back:
-        path = prefs.getString(_backImageKey);
-        break;
-      case AvatarAngle.leftSide:
-        path = prefs.getString(_leftSideImageKey);
-        break;
-    }
-
-    if (path == null) return null;
-
-    final file = File(path);
-    if (await file.exists()) {
-      return file;
-    }
-    return null;
-  }
-
-  /// Verifica si tiene todas las vistas del avatar
-  Future<bool> hasCompleteMultiAngleAvatar() async {
-    final multiAngle = await getMultiAngleAvatar();
-    return multiAngle?.isComplete ?? false;
   }
 
   /// Elimina el avatar y todas las preferencias relacionadas
@@ -234,18 +82,11 @@ class AvatarStorageService {
 
     // Limpiar preferencias
     await prefs.remove(_avatarImageKey);
-    await prefs.remove(_measurementsKey);
     await prefs.remove(_hasCompletedSetupKey);
     await prefs.remove(_avatarCreatedAtKey);
   }
 
-  /// Actualiza las medidas manteniendo la misma imagen
-  Future<void> updateMeasurements(UserMeasurements measurements) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_measurementsKey, jsonEncode(measurements.toJson()));
-  }
-
-  /// Actualiza la imagen del avatar manteniendo las mismas medidas
+  /// Actualiza la imagen del avatar
   Future<void> updateAvatarImage(File newImage) async {
     final prefs = await SharedPreferences.getInstance();
 

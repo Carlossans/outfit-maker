@@ -2,10 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/image_service.dart';
 import '../services/avatar_storage_service.dart';
-import '../models/user_measurements.dart';
 import 'home_screen.dart';
 
-/// Pantalla simplificada para configurar el avatar del usuario
+/// Pantalla de configuración inicial del avatar del usuario
+/// Solo se muestra una vez cuando el usuario abre la app por primera vez
 class AvatarSetupScreen extends StatefulWidget {
   const AvatarSetupScreen({super.key});
 
@@ -19,12 +19,6 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
 
   final ImageService _imageService = ImageService();
   final AvatarStorageService _avatarStorage = AvatarStorageService();
-
-  // Controladores para medidas
-  final heightController = TextEditingController(text: '170');
-  final weightController = TextEditingController(text: '70');
-  final shouldersController = TextEditingController(text: '45');
-  final waistController = TextEditingController(text: '80');
 
   Future<void> _takePhoto() async {
     final file = await _imageService.pickFromCamera();
@@ -51,17 +45,8 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final measurements = UserMeasurements(
-        height: double.tryParse(heightController.text) ?? 170,
-        weight: double.tryParse(weightController.text) ?? 70,
-        shoulders: double.tryParse(shouldersController.text) ?? 45,
-        waist: double.tryParse(waistController.text) ?? 80,
-      );
-
-      await _avatarStorage.saveAvatar(
-        avatarImage: userImage!,
-        measurements: measurements,
-      );
+      // Guardar solo la imagen del avatar (sin medidas)
+      await _avatarStorage.saveAvatarSimple(avatarImage: userImage!);
 
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
@@ -83,15 +68,6 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
   }
 
   @override
-  void dispose() {
-    heightController.dispose();
-    weightController.dispose();
-    shouldersController.dispose();
-    waistController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -103,6 +79,26 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Título de bienvenida
+            const Text(
+              '¡Bienvenido a Outfit Maker!',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Para empezar, necesitamos una foto de tu cuerpo entero',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+
             // Instrucciones
             Container(
               padding: const EdgeInsets.all(16),
@@ -123,14 +119,15 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
                   Text('• Estar de pie, de frente'),
                   Text('• Fondo claro y simple'),
                   Text('• Buena iluminación'),
+                  Text('• Ropa ajustada para mejor visualización'),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
             // Preview de la imagen
             Container(
-              height: 300,
+              height: 350,
               decoration: BoxDecoration(
                 color: Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(12),
@@ -148,11 +145,22 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.person_outline,
-                              size: 80, color: Colors.grey.shade400),
-                          const SizedBox(height: 8),
+                              size: 100, color: Colors.grey.shade400),
+                          const SizedBox(height: 12),
                           Text(
-                            'Toca para subir foto',
-                            style: TextStyle(color: Colors.grey.shade600),
+                            'Toca para subir tu foto',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Solo se pedirá una vez',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -161,8 +169,8 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
 
             if (userImage != null)
               Container(
-                margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.green.shade100,
                   borderRadius: BorderRadius.circular(20),
@@ -171,10 +179,10 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 18),
-                    SizedBox(width: 6),
+                    Icon(Icons.check_circle, color: Colors.green, size: 20),
+                    SizedBox(width: 8),
                     Text(
-                      'Foto cargada',
+                      'Foto cargada correctamente',
                       style: TextStyle(
                           color: Colors.green, fontWeight: FontWeight.bold),
                     ),
@@ -182,77 +190,30 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
                 ),
               ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // Botones de foto
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _takePhoto,
+                    onPressed: _isSaving ? null : _takePhoto,
                     icon: const Icon(Icons.camera_alt),
                     label: const Text('Cámara'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _selectFromGallery,
+                    onPressed: _isSaving ? null : _selectFromGallery,
                     icon: const Icon(Icons.photo_library),
                     label: const Text('Galería'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Formulario de medidas
-            const Text(
-              'Tus medidas (cm)',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Introduce tus medidas manualmente',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: _buildMeasurementField(
-                    controller: heightController,
-                    label: 'Altura (cm)',
-                    icon: Icons.height,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildMeasurementField(
-                    controller: weightController,
-                    label: 'Peso (kg)',
-                    icon: Icons.monitor_weight,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildMeasurementField(
-                    controller: shouldersController,
-                    label: 'Hombros (cm)',
-                    icon: Icons.accessibility,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildMeasurementField(
-                    controller: waistController,
-                    label: 'Cintura (cm)',
-                    icon: Icons.straighten,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
               ],
@@ -263,40 +224,25 @@ class _AvatarSetupScreenState extends State<AvatarSetupScreen> {
             ElevatedButton(
               onPressed: _isSaving || userImage == null ? null : _saveAndContinue,
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 18),
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 foregroundColor: Colors.white,
               ),
               child: _isSaving
                   ? const SizedBox(
-                      height: 20,
-                      width: 20,
+                      height: 24,
+                      width: 24,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('Crear Avatar', style: TextStyle(fontSize: 18)),
+                  : const Text(
+                      'Comenzar',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
             ),
             const SizedBox(height: 20),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildMeasurementField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, size: 20),
-        border: const OutlineInputBorder(),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
     );
   }

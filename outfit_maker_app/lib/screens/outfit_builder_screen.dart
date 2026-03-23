@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/app_models.dart';
 import '../services/app_services.dart';
-import '../widgets/outfit_canvas_new.dart';
-import '../widgets/clothing_carousel.dart';
+import '../widgets/outfit_canvas_with_avatar.dart';
 
 /// Pantalla para crear outfits visualmente
-/// Muestra un maniquí central con prendas superpuestas y carruseles para seleccionar
+/// Muestra el avatar del usuario con carruseles superpuestos para seleccionar prendas
 class OutfitBuilderScreen extends StatefulWidget {
   const OutfitBuilderScreen({super.key});
 
@@ -72,10 +71,6 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
         SnackBar(
           content: Text('${item.name} añadido'),
           duration: const Duration(seconds: 1),
-          action: SnackBarAction(
-            label: 'Deshacer',
-            onPressed: () => _onItemSelected(category, null),
-          ),
         ),
       );
     }
@@ -184,39 +179,6 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
     }
   }
 
-  /// Sugiere un outfit aleatorio
-  void _suggestOutfit() {
-    final hasClothes = _clothesByCategory.values.any((list) => list.isNotEmpty);
-
-    if (!hasClothes) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay prendas en el armario')),
-      );
-      return;
-    }
-
-    setState(() {
-      for (final category in ClothingCategory.values) {
-        final items = _clothesByCategory[category];
-        if (items != null && items.isNotEmpty) {
-          // Seleccionar aleatoriamente o dejar null
-          _selectedByCategory[category] =
-              DateTime.now().millisecond % 3 == 0 ? null : items.first;
-        }
-      }
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Sugerencia: ${_selectedItems.length} prendas'),
-        action: SnackBarAction(
-          label: 'Aceptar',
-          onPressed: () {},
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -229,11 +191,6 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
       appBar: AppBar(
         title: const Text('Crear Outfit'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome),
-            onPressed: _suggestOutfit,
-            tooltip: 'Sugerir outfit',
-          ),
           if (_hasSelection)
             IconButton(
               icon: const Icon(Icons.clear),
@@ -244,92 +201,71 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
       ),
       body: Column(
         children: [
-          // SECCIÓN SUPERIOR: Canvas con el maniquí y prendas
-          Expanded(
-            flex: 5,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: OutfitCanvas(
-                selectedItems: _selectedItems,
-                height: double.infinity,
-              ),
+          // Header con información
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.touch_app,
+                  size: 16,
+                  color: Colors.grey.shade600,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Toca una prenda para seleccionarla',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _hasSelection
+                        ? Colors.blue.shade100
+                        : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_selectedItems.length} prendas',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _hasSelection
+                          ? Colors.blue.shade800
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 
-          // SECCIÓN INFERIOR: Selectores de prendas
+          // Canvas principal con avatar y carruseles
           Expanded(
-            flex: 4,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Indicador de arrastre
-                  Container(
-                    margin: const EdgeInsets.symmetric(vertical: 12),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: _clothesByCategory.values.every((l) => l.isEmpty)
+                  ? _buildEmptyState()
+                  : OutfitCanvasWithAvatar(
+                      selectedItems: _selectedItems,
+                      selectedByCategory: _selectedByCategory,
+                      onItemSelected: _onItemSelected,
+                      clothesByCategory: _clothesByCategory,
                     ),
-                  ),
-
-                  // Header de sección
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.checkroom,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Selecciona prendas',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${_selectedItems.length} seleccionadas',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Carruseles de prendas
-                  Expanded(
-                    child: _clothesByCategory.values.every((l) => l.isEmpty)
-                        ? _buildEmptyState()
-                        : ClothingCarouselSelector(
-                            clothesByCategory: _clothesByCategory,
-                            selectedByCategory: _selectedByCategory,
-                            onItemSelected: _onItemSelected,
-                            itemSize: 80,
-                          ),
-                  ),
-                ],
-              ),
             ),
           ),
         ],
@@ -360,14 +296,15 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
         children: [
           Icon(
             Icons.checkroom_outlined,
-            size: 48,
+            size: 64,
             color: Colors.grey.shade400,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Text(
             'No hay prendas en tu armario',
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
               color: Colors.grey.shade600,
             ),
           ),
@@ -375,9 +312,15 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
           Text(
             'Añade prendas primero para crear outfits',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               color: Colors.grey.shade500,
             ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Volver al inicio'),
           ),
         ],
       ),

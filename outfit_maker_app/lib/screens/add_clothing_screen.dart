@@ -1,9 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/image_service.dart';
-import '../services/wardrobe_service.dart';
-import '../models/clothing_item.dart';
-import 'clothing_multi_angle_capture_screen.dart';
+import '../services/app_services.dart';
+import '../models/app_models.dart';
 
 /// Pantalla simplificada para añadir prendas al armario
 class AddClothingScreen extends StatefulWidget {
@@ -19,101 +18,20 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
 
   final ImageService imageService = ImageService();
   final nameController = TextEditingController();
-  final sizeController = TextEditingController();
-  ClothingType selectedType = ClothingType.top;
+  final colorController = TextEditingController();
+  ClothingCategory selectedCategory = ClothingCategory.tops;
 
-  @override
-  void initState() {
-    super.initState();
-    // Navegar automáticamente a la captura multi-ángulo al abrir
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showCaptureOptions();
-    });
-  }
-
-  void _showCaptureOptions() {
-    showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      enableDrag: false,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Icon(Icons.camera_enhance, size: 48, color: Colors.purple),
-            const SizedBox(height: 16),
-            const Text(
-              'Añadir Prenda',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Elige cómo quieres capturar tu prenda:',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _navigateToMultiAngleCapture();
-              },
-              icon: const Icon(Icons.panorama),
-              label: const Text('Captura Multi-Ángulo (Recomendado)'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _showSimpleCapture();
-              },
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('Captura Simple (1 foto)'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _navigateToMultiAngleCapture() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ClothingMultiAngleCaptureScreen(
-          initialType: selectedType,
-        ),
-      ),
-    );
-
-    if (result == true) {
-      Navigator.pop(context);
-    }
-  }
-
-  void _showSimpleCapture() {
-    // El formulario simple se muestra directamente
-  }
-
-  Future<void> pickImageGallery() async {
+  Future<void> _pickImageGallery() async {
     final file = await imageService.pickFromGallery();
     if (file != null) setState(() => imageFile = file);
   }
 
-  Future<void> pickImageCamera() async {
+  Future<void> _pickImageCamera() async {
     final file = await imageService.pickFromCamera();
     if (file != null) setState(() => imageFile = file);
   }
 
-  Future<void> saveClothing() async {
+  Future<void> _saveClothing() async {
     if (imageFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecciona una imagen primero')),
@@ -121,20 +39,29 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
       return;
     }
 
+    if (nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Introduce un nombre para la prenda')),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
+      // Guardar imagen permanentemente
+      final savedPath = await ImageService().saveClothingImage(imageFile!);
+
       final item = ClothingItem(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: nameController.text.isNotEmpty ? nameController.text : 'Prenda',
-        category: selectedType.displayName,
-        size: sizeController.text.isNotEmpty ? sizeController.text : 'M',
-        imagePath: imageFile!.path,
-        type: selectedType,
+        name: nameController.text.trim(),
+        category: selectedCategory,
+        imagePath: savedPath ?? imageFile!.path,
+        color: colorController.text.trim().isNotEmpty ? colorController.text.trim() : null,
         createdAt: DateTime.now(),
       );
 
-      await WardrobeService().addClothing(item);
+      await WardrobeService().addItem(item);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -158,7 +85,7 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
   @override
   void dispose() {
     nameController.dispose();
-    sizeController.dispose();
+    colorController.dispose();
     super.dispose();
   }
 
@@ -167,59 +94,36 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Añadir prenda'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.orange.shade700),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Estás usando modo simple. Para mejores resultados, usa captura multi-ángulo.',
-                      style: TextStyle(color: Colors.orange.shade800, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
             // Preview de imagen
             Container(
-              height: 200,
-              width: double.infinity,
+              height: 250,
               decoration: BoxDecoration(
                 color: Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(
+                  color: imageFile != null ? Colors.green : Colors.grey.shade300,
+                  width: imageFile != null ? 2 : 1,
+                ),
               ),
               child: imageFile != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.file(imageFile!, fit: BoxFit.cover),
+                      child: Image.file(imageFile!, fit: BoxFit.contain),
                     )
                   : Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.image, size: 48, color: Colors.grey.shade400),
-                          const SizedBox(height: 8),
+                          Icon(Icons.add_a_photo, size: 64, color: Colors.grey.shade400),
+                          const SizedBox(height: 12),
                           Text(
-                            'Sin imagen seleccionada',
+                            'Toca para añadir foto',
                             style: TextStyle(color: Colors.grey.shade600),
                           ),
                         ],
@@ -228,98 +132,102 @@ class _AddClothingScreenState extends State<AddClothingScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Selector de tipo de prenda
-            DropdownButtonFormField<ClothingType>(
-              value: selectedType,
-              decoration: const InputDecoration(
-                labelText: 'Tipo de prenda',
-                border: OutlineInputBorder(),
-              ),
-              items: ClothingType.values.map((type) {
-                return DropdownMenuItem(
-                  value: type,
-                  child: Row(
-                    children: [
-                      Text(type.icon),
-                      const SizedBox(width: 8),
-                      Text(type.displayName),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => selectedType = value);
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Nombre de la prenda',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            TextField(
-              controller: sizeController,
-              decoration: const InputDecoration(
-                labelText: 'Talla (EU)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-
+            // Botones de imagen
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: pickImageGallery,
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Galería'),
+                    onPressed: _pickImageCamera,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Cámara'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: pickImageCamera,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Cámara'),
+                    onPressed: _pickImageGallery,
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('Galería'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 24),
 
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isSaving ? null : saveClothing,
-                icon: _isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.save),
-                label: Text(_isSaving ? 'Guardando...' : 'Guardar prenda'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
+            // Selector de categoría
+            DropdownButtonFormField<ClothingCategory>(
+              value: selectedCategory,
+              decoration: const InputDecoration(
+                labelText: 'Categoría',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.category),
+              ),
+              items: ClothingCategory.values.map((category) {
+                return DropdownMenuItem(
+                  value: category,
+                  child: Row(
+                    children: [
+                      Text(category.icon),
+                      const SizedBox(width: 8),
+                      Text(category.displayName),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => selectedCategory = value);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Nombre de la prenda
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Nombre de la prenda',
+                hintText: 'Ej: Camiseta azul',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.label_outline),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
-            TextButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _navigateToMultiAngleCapture();
-              },
-              icon: const Icon(Icons.panorama),
-              label: const Text('Cambiar a captura multi-ángulo'),
+            // Color de la prenda
+            TextField(
+              controller: colorController,
+              decoration: const InputDecoration(
+                labelText: 'Color (opcional)',
+                hintText: 'Ej: Azul marino',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.palette_outlined),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Botón guardar
+            ElevatedButton.icon(
+              onPressed: _isSaving ? null : _saveClothing,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.save),
+              label: Text(_isSaving ? 'Guardando...' : 'Guardar prenda'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
+              ),
             ),
           ],
         ),
